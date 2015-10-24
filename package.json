@@ -1,0 +1,17 @@
+{
+  "title": "Fişek Çözücü",
+  "name": "mugo",
+  "version": "0.0.1",
+  "description": "boş cigara",
+  "main": "index.js",
+  "author": "PIRASAKAL",
+  "engines": {
+    "firefox": ">=38.0a1",
+    "chrome": ">=38.0a1",
+    "fennec": ">=38.0a1"
+  },
+  "license": "GPLv3",
+  "keywords": [
+    "jetpack"
+  ]
+}

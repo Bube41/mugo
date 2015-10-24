@@ -1,2 +1,2 @@
-# mugo
-Yaramıyosa sana boş cigara var!
+#Fişek Çözücü
+boş cigara
